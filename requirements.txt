@@ -1,9 +1,6 @@
 flask
 numpy
-opencv-python
+opencv-python-headless
 torch
 torchvision
-matplotlib
-pandas
-albumentations
-scikit-learn
+gunicorn
