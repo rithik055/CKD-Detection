@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="hero card card-hero mb-4">
+  <div class="card-body d-lg-flex align-items-center justify-content-between">
+    <div>
+      <p class="eyebrow mb-1">Kidney Stage Prediction</p>
+      <h2 class="display-6 fw-bold mb-2">Upload a CT slice. Get an interpretable stage.</h2>
+      <p class="text-secondary mb-0">Segmentation-driven ROI + EfficientNet classifier. Four clear severity levels with actionable care notes.</p>
+    </div>
+    <div class="d-flex gap-2 mt-3 mt-lg-0">
+      <span class="chip">Dice-ready masks</span>
+      <span class="chip">Fast ROI focus</span>
+      <span class="chip">Lag-free UI</span>
+    </div>
+  </div>
+</section>
+
+<div class="row g-4">
+  <!-- Upload & actions -->
+  <div class="col-lg-4">
+    <div class="card card-glass h-100">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Upload CT Slice</h5>
+        <p class="text-secondary small mb-3">Single axial slice (PNG or JPG). We segment first, then classify the kidney ROI.</p>
+
+        {% if error %}
+          <div class="alert alert-danger py-2">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" data-show-loading="true">
+          <div class="mb-3">
+            <div class="dropzone">
+              <input class="form-control form-control-sm" type="file" name="ct_image" accept=".png,.jpg,.jpeg" required>
+              <p class="hint mb-1 fw-semibold">Choose a CT slice (PNG/JPG)</p>
+              <p class="mini small mb-0">Tip: Use a single axial slice with clear kidney visibility.</p>
+            </div>
+          </div>
+          <div class="mt-3" id="upload-preview" style="display: none;">
+            <p class="small text-secondary mb-2 fw-semibold">Selected slice preview</p>
+            <div class="img-wrap">
+              <img id="upload-preview-img" class="img-fluid rounded-3 shadow-sm" alt="Selected CT slice preview">
+            </div>
+          </div>
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary" data-loading-submit>
+              Run segmentation & stage
+            </button>
+            <button type="button" class="btn btn-outline-light" id="clear-panel">Reset view</button>
+          </div>
+        </form>
+
+        <hr class="my-4">
+        <div class="d-flex flex-wrap gap-2">
+          <div class="badge rounded-pill bg-glow">U-Net kidney mask</div>
+          <div class="badge rounded-pill bg-glow">EfficientNet stage head</div>
+          <div class="badge rounded-pill bg-glow">ROI attention</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="col-lg-8">
+    <div class="card card-glass h-100">
+      <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="card-title mb-0">Stage overview</h5>
+          <div class="d-flex align-items-center gap-2">
+            <span class="dot dot-good"></span><small class="text-secondary">Segmentation-led region focus</small>
+          </div>
+        </div>
+
+        {% if result_ready %}
+          <div class="stage-banner mb-3 fade-in">
+            <div>
+              <p class="mb-1 text-uppercase small" style="color: rgba(255, 255, 255, 0.85);">Predicted level</p>
+              <h4 class="mb-0">{{ pred_stage_label }}</h4>
+              <p class="mb-0 small" style="color: rgba(255, 255, 255, 0.85);">Stage {{ pred_stage }} of 4</p>
+            </div>
+            <div class="stage-pill">Kidney damage: {{ stage_details.summary }}</div>
+          </div>
+
+          <div class="alert alert-info mb-3 fade-in" id="summary-text">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold mb-1">AI note</div>
+                <div class="small">{{ summary }}</div>
+              </div>
+              <button class="btn btn-outline-light btn-sm" data-copy-target="#summary-text">Copy note</button>
+            </div>
+          </div>
+
+          <div class="row g-3 align-items-stretch fade-in">
+            <div class="col-md-3 text-center">
+              <p class="mb-2 small text-secondary fw-semibold">Original slice</p>
+              <div class="img-wrap">
+                <img src="{{ img_ct }}" class="img-fluid rounded-3 shadow-sm" alt="CT slice" loading="lazy">
+              </div>
+            </div>
+            <div class="col-md-3 text-center">
+              <p class="mb-2 small text-secondary fw-semibold">Segmentation mask</p>
+              <div class="img-wrap">
+                <img src="{{ img_mask }}" class="img-fluid rounded-3 shadow-sm" alt="Mask" loading="lazy">
+              </div>
+            </div>
+            <div class="col-md-3 text-center">
+              <p class="mb-2 small text-secondary fw-semibold">Overlay</p>
+              <div class="img-wrap">
+                <img src="{{ img_overlay }}" class="img-fluid rounded-3 shadow-sm" alt="Overlay" loading="lazy">
+              </div>
+            </div>
+            <div class="col-md-3 text-center">
+              <p class="mb-2 small text-secondary fw-semibold">Focused ROI</p>
+              <div class="img-wrap pulse">
+                <img src="{{ img_roi }}" class="img-fluid rounded-3 shadow-sm" alt="ROI" loading="lazy">
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <div class="placeholder-card">
+            <h6 class="mb-2">Ready when you are</h6>
+            <p class="small mb-0">Drop in a CT slice to see segmentation, ROI, and severity stage.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Stage guide -->
+<section class="mt-4">
+  <div class="card card-hero">
+    <div class="card-body">
+      <div class="d-flex justify-content-between flex-wrap align-items-center mb-3">
+        <div>
+          <p class="eyebrow mb-1">Severity guide</p>
+          <h5 class="mb-0">How we describe kidney damage across four stages</h5>
+        </div>
+        <button class="btn btn-outline-light btn-sm" id="toggle-guide">Toggle guide</button>
+      </div>
+      <div class="row g-3" id="guide-panel">
+        {% for key, info in stage_info.items() %}
+          <div class="col-md-3">
+            <div class="guide-card h-100">
+              <p class="small mb-2 fw-semibold" style="color: #475569;">Stage {{ key }}</p>
+              <h6 class="mb-2">{{ info.title }}</h6>
+              <p class="small mb-3" style="color: #334155;">{{ info.summary }}</p>
+              <p class="small mb-0 fw-semibold" style="color: #1e40af;">{{ info.care }}</p>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const guide = document.getElementById("guide-panel");
+    const toggle = document.getElementById("toggle-guide");
+    if (toggle && guide) {
+      toggle.addEventListener("click", () => guide.classList.toggle("d-none"));
+    }
+    const reset = document.getElementById("clear-panel");
+    if (reset) {
+      reset.addEventListener("click", () => window.location = "{{ url_for('single_slice') }}");
+    }
+
+    const fileInput = document.querySelector("input[name='ct_image']");
+    const previewWrapper = document.getElementById("upload-preview");
+    const previewImg = document.getElementById("upload-preview-img");
+    if (fileInput && previewWrapper && previewImg) {
+      fileInput.addEventListener("change", (event) => {
+        const target = event.target;
+        const file = target.files && target.files[0];
+        if (!file) {
+          previewWrapper.style.display = "none";
+          previewImg.removeAttribute("src");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target && e.target.result;
+          if (typeof result === "string") {
+            previewImg.src = result;
+            previewWrapper.style.display = "block";
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  });
+</script>
+
+{% endblock %}

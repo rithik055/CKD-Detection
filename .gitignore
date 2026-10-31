@@ -1,0 +1,43 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Virtual environment
+myenv/
+venv/
+
+# Model weights
+*.pth
+*.pt
+models_ckd/
+
+# Environment files
+.env
+.env.*
+
+# CT datasets
+CT_SLICES/
+kits19/
+data/
+
+# Generated results
+static/results/
+
+# Logs
+logs/
+
+# IDE settings
+.vscode/
+
+# macOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Generated analysis and evaluation images
+DataAnalysis/plots/
+Evaluation/plots/
+reports/figures/

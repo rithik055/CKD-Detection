@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="hero card card-hero mb-4">
+  <div class="card-body d-lg-flex align-items-center justify-content-between">
+    <div>
+      <p class="eyebrow mb-1">Batch mode</p>
+      <h3 class="fw-bold mb-2">Whole-case staging with aggregated slices</h3>
+      <p class="text-secondary mb-0">We scan every slice in <code>data/raw/ct_slices</code>, segment kidneys, and average the stage signals.</p>
+    </div>
+    <div class="d-flex gap-2 mt-3 mt-lg-0">
+      <span class="chip">Slice aggregation</span>
+      <span class="chip">ROI-focused</span>
+    </div>
+  </div>
+</section>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card card-glass h-100">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Run whole case</h5>
+        <p class="small text-secondary mb-3">
+          Provide a case ID (e.g. <code>case_00050</code>). The app will iterate through all available slices.
+        </p>
+
+        {% if error %}
+          <div class="alert alert-danger py-2">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" data-show-loading="true">
+          <div class="mb-3">
+            <label class="form-label small">Case ID</label>
+            <input type="text" name="case_id" class="form-control form-control-sm" placeholder="case_00050">
+          </div>
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-primary" data-loading-submit>Run analysis</button>
+            <a href="{{ url_for('single_slice') }}" class="btn btn-outline-light">Single slice mode</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card card-glass h-100">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Case summary</h5>
+
+        {% if result %}
+          <div class="d-flex justify-content-between flex-wrap mb-3">
+            <div>
+              <p class="mb-1 text-secondary small">Case ID</p>
+              <h6 class="mb-0 fw-bold">{{ result.case_id }}</h6>
+            </div>
+            <div>
+              <p class="mb-1 text-secondary small">Slices processed</p>
+              <h6 class="mb-0 fw-bold">{{ result.slice_count }}</h6>
+            </div>
+          </div>
+
+          <div class="stage-banner mb-3">
+            <div>
+              <p class="mb-1 text-uppercase small" style="color: rgba(255, 255, 255, 0.85);">Predicted level</p>
+              <h4 class="mb-0">{{ result.pred_stage_label }}</h4>
+              <p class="mb-0 small" style="color: rgba(255, 255, 255, 0.85);">Stage {{ result.pred_stage }} of 4</p>
+            </div>
+            <div class="stage-pill">Kidney damage: {{ result.stage_details.summary }}</div>
+          </div>
+
+          <div class="alert alert-info small" id="case-summary">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold mb-1">AI note</div>
+                <div>{{ result.summary }}</div>
+              </div>
+              <button class="btn btn-outline-light btn-sm" data-copy-target="#case-summary">Copy note</button>
+            </div>
+          </div>
+        {% else %}
+          <div class="placeholder-card">
+            <h6 class="mb-2">Awaiting a case</h6>
+            <p class="small mb-0">Enter a case ID to summarize all its slices.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
