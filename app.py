@@ -17,22 +17,56 @@ from src.models.efficientnet_ckd import EfficientNetCKD
 # -----------------------------------------------------------
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
-SEG_MODEL_PATH = os.path.join(ROOT, "models_ckd", "unet_kidney_10k_30ep.pth")
-# Model priority: focal (96.07% acc) > enhanced > v2
-FOCAL_MODEL_PATH = os.path.join(ROOT, "models_ckd", "efficientnet_ckd_best_focal.pth")
-ENHANCED_MODEL_PATH = os.path.join(ROOT, "models_ckd", "efficientnet_ckd_best_enhanced.pth")
-V2_MODEL_PATH = os.path.join(ROOT, "models_ckd", "efficientnet_ckd_best_v2.pth")
+HF_REPO_ID = "Rithik055/CKD-Detection-Models"
 
 
-def _resolve_cls_model_path() -> str:
-    """Choose the best available classifier weights, error clearly if none exist."""
-    for candidate in (FOCAL_MODEL_PATH, ENHANCED_MODEL_PATH, V2_MODEL_PATH):
+def get_model_path(filename):
+    local_path = os.path.join(ROOT, "models_ckd", filename)
+
+    # Use local weights when available
+    if os.path.isfile(local_path):
+        return local_path
+
+    # Otherwise download weights from Hugging Face
+    token = os.environ.get("HF_TOKEN")
+
+    if not token:
+        raise RuntimeError("HF_TOKEN is missing from environment variables.")
+
+    from huggingface_hub import hf_hub_download
+
+    return hf_hub_download(
+        repo_id=HF_REPO_ID,
+        filename=filename,
+        token=token
+    )
+
+
+SEG_MODEL_PATH = get_model_path("unet_kidney_10k_30ep.pth")
+
+FOCAL_MODEL_PATH = os.path.join(
+    ROOT, "models_ckd", "efficientnet_ckd_best_focal.pth"
+)
+
+ENHANCED_MODEL_PATH = os.path.join(
+    ROOT, "models_ckd", "efficientnet_ckd_best_enhanced.pth"
+)
+
+V2_MODEL_PATH = os.path.join(
+    ROOT, "models_ckd", "efficientnet_ckd_best_v2.pth"
+)
+
+
+def _resolve_cls_model_path():
+    for candidate in (
+        FOCAL_MODEL_PATH,
+        ENHANCED_MODEL_PATH,
+        V2_MODEL_PATH
+    ):
         if os.path.isfile(candidate):
             return candidate
-    raise FileNotFoundError(
-        "No EfficientNet CKD weights found. Expected one of: "
-        f"{FOCAL_MODEL_PATH}, {ENHANCED_MODEL_PATH}, {V2_MODEL_PATH}"
-    )
+
+    return get_model_path("efficientnet_ckd_best_focal.pth")
 
 
 CLS_MODEL_PATH = _resolve_cls_model_path()
@@ -85,7 +119,9 @@ _effnet.eval()
 print(f"[INFO] Loaded EfficientNet CKD from: {CLS_MODEL_PATH}")
 
 app = Flask(__name__)
-
+@app.route("/healthz")
+def healthz():
+    return "OK", 200
 
 # -----------------------------------------------------------
 # Helper functions
@@ -291,45 +327,55 @@ def whole_case():
             error = "Please enter a case ID (e.g., case_00050)."
         else:
             # find all pngs for this case
-            all_files = sorted(
-                f for f in os.listdir(CT_SLICES_DIR)
-                if f.startswith(case_id) and f.endswith(".png")
-            )
-            if not all_files:
-                error = f"No slices found for {case_id} in data/raw/ct_slices."
+                       # Find all PNG files for this case
+            if not os.path.isdir(CT_SLICES_DIR):
+                error = "Whole-case dataset is not available on this deployment. Please use the single-slice upload feature."
+
             else:
-                probs_sum = np.zeros(NUM_CLASSES, dtype=np.float64)
-                count = 0
+                all_files = sorted(
+                    f for f in os.listdir(CT_SLICES_DIR)
+                    if f.startswith(case_id) and f.endswith(".png")
+                )
 
-                for fname in all_files:
-                    path = os.path.join(CT_SLICES_DIR, fname)
-                    img_gray = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-                    if img_gray is None:
-                        continue
+                if not all_files:
+                    error = f"No slices found for {case_id} in data/raw/ct_slices."
 
-                    img_tensor, ct_gray = preprocess_ct_slice(img_gray)
-                    mask = run_unet_and_get_mask(img_tensor)
-                    roi = extract_kidney_roi(ct_gray, mask)
-                    probs, _ = classify_roi(roi)
-                    probs_sum += probs
-                    count += 1
-
-                if count == 0:
-                    error = f"Could not process slices for {case_id}."
                 else:
-                    avg_probs = probs_sum / count
-                    pred_idx_0 = int(np.argmax(avg_probs))
-                    pred_stage = pred_idx_0 + 1
-                    summary = stage_summary_text(pred_stage)
+                    probs_sum = np.zeros(NUM_CLASSES, dtype=np.float64)
+                    count = 0
 
-                    case_result = {
-                        "case_id": case_id,
-                        "pred_stage": pred_stage,
-                        "pred_stage_label": STAGE_INFO[pred_stage]["title"],
-                        "stage_details": STAGE_INFO[pred_stage],
-                        "slice_count": count,
-                        "summary": summary,
-                    }
+                    for fname in all_files:
+                        path = os.path.join(CT_SLICES_DIR, fname)
+                        img_gray = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+
+                        if img_gray is None:
+                            continue
+
+                        img_tensor, ct_gray = preprocess_ct_slice(img_gray)
+                        mask = run_unet_and_get_mask(img_tensor)
+                        roi = extract_kidney_roi(ct_gray, mask)
+                        probs, _ = classify_roi(roi)
+
+                        probs_sum += probs
+                        count += 1
+
+                    if count == 0:
+                        error = f"Could not process slices for {case_id}."
+
+                    else:
+                        avg_probs = probs_sum / count
+                        pred_idx_0 = int(np.argmax(avg_probs))
+                        pred_stage = pred_idx_0 + 1
+                        summary = stage_summary_text(pred_stage)
+
+                        case_result = {
+                            "case_id": case_id,
+                            "pred_stage": pred_stage,
+                            "pred_stage_label": STAGE_INFO[pred_stage]["title"],
+                            "stage_details": STAGE_INFO[pred_stage],
+                            "slice_count": count,
+                            "summary": summary,
+                        }
 
     return render_template(
         "case.html",
